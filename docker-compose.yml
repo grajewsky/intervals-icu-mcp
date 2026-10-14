@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-intervals}
+      POSTGRES_USER: ${POSTGRES_USER:-intervals}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intervals}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mcp:
+    build:
+      context: ./src/IntervalsMcp
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Podwójne podkreślenie "__" = zagnieżdżenie sekcji w konfiguracji .NET
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-intervals};Username=${POSTGRES_USER:-intervals};Password=${POSTGRES_PASSWORD:-intervals}"
+      Intervals__ApiKey: ${INTERVALS_API_KEY:?Ustaw INTERVALS_API_KEY w pliku .env}
+      Intervals__AthleteId: ${INTERVALS_ATHLETE_ID:-0}
+    ports:
+      # Tylko localhost — endpoint MCP nie ma uwierzytelniania
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata:
